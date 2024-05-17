@@ -52,6 +52,17 @@ class CausalSelfAttention(nn.Module):
     def forward(self, x):
         B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
 
+        # create the static matrix
+        # TODO this should be cached
+        static_attention = torch.full((T, T), 0.0)
+        for sequence in range(T):
+          for connection in range(sequence+1):
+            static_attention[sequence][connection] = ((1.0)/(sequence+1))/T
+              
+        # calculate the output
+        y = static_attention @ x
+        
+        """ old implementation
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
         q, k, v  = self.c_attn(x).split(self.n_embd, dim=2)
         k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
@@ -70,6 +81,7 @@ class CausalSelfAttention(nn.Module):
             att = self.attn_dropout(att)
             y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
         y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
+        """
 
         # output projection
         y = self.resid_dropout(self.c_proj(y))
