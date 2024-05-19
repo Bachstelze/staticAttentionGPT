@@ -15,6 +15,23 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
+import torch.multiprocessing as mp
+print("multi processing method:")
+print(mp.get_start_method())
+
+def calculate_static_attention_combination(input_tensor, batch_number, T, queue):
+  for sequence in range(1,T):
+    scalar = 1.0/(sequence+1)
+    input_tensor[sequence] = torch.add(input_tensor[sequence]*scalar, input_tensor[sequence-1], alpha=(1-scalar))
+  queue.put([batch_number, input_tensor])
+
+def consume_combination_queue(queue, result):
+    # consume work
+    for item_number in range(queue.qsize()):
+      item = queue.get()
+      sequence_index = item[0]
+      result[sequence_index] = item[1]
+
 class LayerNorm(nn.Module):
     """ LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False """
 
@@ -53,10 +70,27 @@ class CausalSelfAttention(nn.Module):
     def forward(self, x):
         B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
 
+        # parallel linear combination
+        manager = mp.Manager()
+        queue = manager.Queue()
+
+        processes = []
+        for i in range(num_processes):
+            p = mp.Process(target=calculate_static_attention_combination, args=(x[i], i, T, queue))
+            p.start()
+            processes.append(p)
+        for p in processes:
+            p.join()
+        
+        result = torch.zeros(B,T,C)
+        consume_combination_queue(queue, result)
+        """
+        # sequential computation
         for batch in range(B):
           for sequence in range(1,T):
             scalar = 1.0/(sequence+1)
             x[batch][sequence] = torch.add(x[batch][sequence]*scalar, x[batch][sequence-1], alpha=(1-scalar))
+        """
         
         """ old implementation
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
@@ -80,7 +114,7 @@ class CausalSelfAttention(nn.Module):
         """
 
         # output projection
-        y = self.resid_dropout(self.c_proj(x))
+        y = self.resid_dropout(self.c_proj(result))
         return y
 
 class MLP(nn.Module):
