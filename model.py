@@ -33,6 +33,7 @@ def consume_combination_queue(queue, result):
       item = queue.get()
       sequence_index = item[0]
       result[sequence_index] = item[1]
+      del item
 
 class LayerNorm(nn.Module):
     """ LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False """
