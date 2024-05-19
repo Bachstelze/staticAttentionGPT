@@ -75,7 +75,7 @@ class CausalSelfAttention(nn.Module):
         queue = manager.Queue()
 
         processes = []
-        for i in range(num_processes):
+        for i in range(B):
             p = mp.Process(target=calculate_static_attention_combination, args=(x[i], i, T, queue))
             p.start()
             processes.append(p)
