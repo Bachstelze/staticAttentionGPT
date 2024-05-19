@@ -52,15 +52,10 @@ class CausalSelfAttention(nn.Module):
     def forward(self, x):
         B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
 
-        # create the static matrix
-        # TODO this should be cached
-        static_attention = torch.full((T, T), 0.0)
-        for sequence in range(T):
-          for connection in range(sequence+1):
-            static_attention[sequence][connection] = ((1.0)/(sequence+1))/T
-              
-        # calculate the output
-        y = static_attention @ x
+        for batch in range(B):
+          for sequence in range(1,T):
+            scalar = 1.0/(sequence+1)
+            x[batch][sequence] = torch.add(x[batch][sequence]*scalar, x[batch][sequence-1], alpha=(1-scalar))
         
         """ old implementation
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
@@ -84,7 +79,7 @@ class CausalSelfAttention(nn.Module):
         """
 
         # output projection
-        y = self.resid_dropout(self.c_proj(y))
+        y = self.resid_dropout(self.c_proj(x))
         return y
 
 class MLP(nn.Module):
