@@ -15,10 +15,12 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
+"""
+# for parallel test
 import torch.multiprocessing as mp
 print("multi processing method:")
 print(mp.get_start_method())
-
+"""
 def calculate_static_attention_combination(input_tensor, batch_number, T, queue):
   for sequence in range(1,T):
     scalar = 1.0/(sequence+1)
@@ -70,7 +72,8 @@ class CausalSelfAttention(nn.Module):
     def forward(self, x):
         B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
 
-        # parallel linear combination
+        # parallel linear combination test
+        """
         manager = mp.Manager()
         queue = manager.Queue()
 
@@ -90,7 +93,7 @@ class CausalSelfAttention(nn.Module):
           for sequence in range(1,T):
             scalar = 1.0/(sequence+1)
             x[batch][sequence] = torch.add(x[batch][sequence]*scalar, x[batch][sequence-1], alpha=(1-scalar))
-        """
+        
         
         """ old implementation
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
