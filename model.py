@@ -18,8 +18,17 @@ from torch.nn import functional as F
 
 # for parallel test
 import torch.multiprocessing as mp
-print("multi processing method:")
-print(mp.get_start_method())
+if __name__ == '__main__':
+  try:
+    mp.set_start_method('spawn', force=True)
+    print("spawned")
+  except RuntimeError:
+    pass
+
+  mp.freeze_support()
+
+  print("multi processing method:")
+  print(mp.get_start_method())
 
 def calculate_static_attention_combination(input_tensor, batch_number, T, queue):
   for sequence in range(1,T):
@@ -27,7 +36,24 @@ def calculate_static_attention_combination(input_tensor, batch_number, T, queue)
     input_tensor[sequence] = torch.add(input_tensor[sequence]*scalar, input_tensor[sequence-1], alpha=(1-scalar))
   queue.put([batch_number, input_tensor])
 
-def consume_combination_queue(queue, result):
+def consume_combination_queue(queue, result, size):
+  results = 0
+  nb_ended_workers = 0
+  while nb_ended_workers != 1 and results < size:
+      item = queue.get()
+      #print("result")
+      #print(item)
+      if item is None:
+        # this can happen in older pytorch versions
+        nb_ended_workers += 1
+      else:
+        sequence_index = item[0]
+        result[sequence_index] = item[1]
+        del item
+        results += 1
+  #print("terminate")
+
+def old_consume_combination_queue(queue, result):
     # consume work
     for item_number in range(queue.qsize()):
       item = queue.get()
@@ -73,21 +99,30 @@ class CausalSelfAttention(nn.Module):
     def forward(self, x):
         B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
 
-        # parallel linear combination test
-        
-        manager = mp.Manager()
-        queue = manager.Queue()
+       # parallel linear combination test
+        x.share_memory_()
+        #manager = mp.Manager()
+        queue = mp.Queue()
+        print("set event")
+        done = mp.Event()
 
         processes = []
         for i in range(B):
-            p = mp.Process(target=calculate_static_attention_combination, args=(x[i].detach().clone(), i, T, queue))
+            x[i].share_memory_()
+            p = mp.Process(target=calculate_static_attention_combination, args=(x[i].detach().clone().cuda(), i, T, queue, done))
             p.start()
             processes.append(p)
-        for p in processes:
-            p.join()
         
-        result = torch.zeros(B,T,C)
-        consume_combination_queue(queue, result)
+        print("started process")
+           
+        #for p in processes:
+        #    p.join()
+        
+        
+        result = torch.zeros(B,T,C).cuda()
+        consume_combination_queue(queue, result, B)
+        #print("waiting for done")
+        done.set()
         """
         # sequential computation
         for batch in range(B):
