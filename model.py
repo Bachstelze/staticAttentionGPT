@@ -74,13 +74,13 @@ class CausalSelfAttention(nn.Module):
         B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
 
         # parallel linear combination test
-        """
+        
         manager = mp.Manager()
         queue = manager.Queue()
 
         processes = []
         for i in range(B):
-            p = mp.Process(target=calculate_static_attention_combination, args=(x[i], i, T, queue))
+            p = mp.Process(target=calculate_static_attention_combination, args=(x[i].detach().clone(), i, T, queue))
             p.start()
             processes.append(p)
         for p in processes:
@@ -94,7 +94,7 @@ class CausalSelfAttention(nn.Module):
           for sequence in range(1,T):
             scalar = 1.0/(sequence+1)
             x[batch][sequence] = torch.add(x[batch][sequence]*scalar, x[batch][sequence-1], alpha=(1-scalar))
-        
+        """
         
         """ old implementation
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
@@ -118,7 +118,7 @@ class CausalSelfAttention(nn.Module):
         """
 
         # output projection
-        y = self.resid_dropout(self.c_proj(x))
+        y = self.resid_dropout(self.c_proj(result))
         return y
 
 class MLP(nn.Module):
