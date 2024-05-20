@@ -15,12 +15,12 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-"""
+
 # for parallel test
 import torch.multiprocessing as mp
 print("multi processing method:")
 print(mp.get_start_method())
-"""
+
 def calculate_static_attention_combination(input_tensor, batch_number, T, queue):
   for sequence in range(1,T):
     scalar = 1.0/(sequence+1)
