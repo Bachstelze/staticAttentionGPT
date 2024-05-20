@@ -15,8 +15,16 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
+def static_combination(batch):
+  sequence_length, dimension = batch.size()
+  for sequence in range(1, sequence_length):
+    scalar = 1.0/(sequence+1)
+    batch[sequence] = torch.add(batch[sequence]*scalar, batch[sequence-1], alpha=(1-scalar))
+  return batch
+
 
 # for parallel test
+"""
 import torch.multiprocessing as mp
 if __name__ == '__main__':
   try:
@@ -60,6 +68,7 @@ def old_consume_combination_queue(queue, result):
       sequence_index = item[0]
       result[sequence_index] = item[1]
       del item
+"""
 
 class LayerNorm(nn.Module):
     """ LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False """
@@ -99,7 +108,8 @@ class CausalSelfAttention(nn.Module):
     def forward(self, x):
         B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
 
-       # parallel linear combination test
+        # parallel linear combination test
+        """
         x.share_memory_()
         #manager = mp.Manager()
         queue = mp.Queue()
@@ -123,6 +133,7 @@ class CausalSelfAttention(nn.Module):
         consume_combination_queue(queue, result, B)
         #print("waiting for done")
         done.set()
+        """
         """
         # sequential computation
         for batch in range(B):
@@ -151,9 +162,9 @@ class CausalSelfAttention(nn.Module):
             y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
         y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
         """
-
+        torch.vmap(static_combination)(x)
         # output projection
-        y = self.resid_dropout(self.c_proj(result))
+        y = self.resid_dropout(self.c_proj(x))
         return y
 
 class MLP(nn.Module):
